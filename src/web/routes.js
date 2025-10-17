@@ -1,7 +1,6 @@
 import express from 'express';
 import { verifyTelegramSecret, verifyGsInternalToken } from '../services/security.js';
 import { ENV } from '../config/env.js';
-import { SheetsRepo } from '../services/sheets.js';
 import { AppCache } from '../services/cache.js';
 import { escapeMd } from '../services/validator.js';
 import { logger } from '../services/logger.js';
@@ -124,3 +123,4 @@ export function routes(bot) {
 
   return router;
 }
+
