@@ -194,11 +194,11 @@ export function studentScene(cache) {
   scene.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery();
   });
-// في نهاية التسجيل الناجح
-// await SheetsRepo.logAction('طالب', studentId, 'Registered successfully');
+
 
 
   return scene;
 }
+
 
 
