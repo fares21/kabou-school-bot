@@ -1,6 +1,6 @@
 export const SHEETS = {
-  STUDENTS: 'Students',
-  PARENTS: 'Parents'
+  STUDENTS: 'students',
+  PARENTS: 'parents'
 };
 
 export const STUDENT_SUBJECTS = [
@@ -34,3 +34,4 @@ export const SESSION_LIMITS = {
 };
 
 export const CACHE_TTL = 3 * 60 * 60; // 3 hours
+
