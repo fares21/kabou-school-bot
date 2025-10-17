@@ -23,9 +23,10 @@ async function main() {
         const webhookUrl = `${ENV.WEBHOOK_DOMAIN}${ENV.WEBHOOK_PATH}`;
         
         await bot.telegram.setWebhook(webhookUrl, {
-          secret_token: ENV.WEBHOOK_SECRET_TOKEN,
-          drop_pending_updates: true
-        });
+  secret_token: ENV.WEBHOOK_SECRET_TOKEN,
+  drop_pending_updates: true,
+  allowed_updates: ['message', 'callback_query']
+});
 
         logger.info({ webhookUrl }, 'Telegram webhook configured');
 
@@ -87,3 +88,4 @@ async function main() {
 }
 
 main();
+
