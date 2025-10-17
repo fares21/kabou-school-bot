@@ -31,6 +31,14 @@ export const db = {
     return result.rows[0];
   },
 
+  async getStudentById(studentId) {
+    const result = await this.query(
+      'SELECT * FROM students WHERE student_id = $1',
+      [studentId]
+    );
+    return result.rows[0];
+  },
+
   async addStudent(data) {
     const result = await this.query(
       `INSERT INTO students (name, phone, year, subjects, teachers, telegram_id, student_id, created_at)
@@ -57,6 +65,16 @@ export const db = {
       [data.name, data.phone, data.childPhone, data.status, data.telegramId, data.parentId]
     );
     return result.rows[0];
+  },
+
+  async getAllStudents() {
+    const result = await this.query('SELECT * FROM students ORDER BY created_at DESC');
+    return result.rows;
+  },
+
+  async getAllParents() {
+    const result = await this.query('SELECT * FROM parents ORDER BY created_at DESC');
+    return result.rows;
   }
 };
 
@@ -91,9 +109,12 @@ export async function initDatabase() {
       );
 
       CREATE INDEX IF NOT EXISTS idx_students_phone ON students(phone);
+      CREATE INDEX IF NOT EXISTS idx_students_id ON students(student_id);
       CREATE INDEX IF NOT EXISTS idx_students_telegram ON students(telegram_id);
       CREATE INDEX IF NOT EXISTS idx_parents_phone ON parents(phone);
+      CREATE INDEX IF NOT EXISTS idx_parents_child ON parents(child_phone);
     `);
+    
     logger.info('Database initialized successfully');
   } catch (error) {
     logger.error({ error: error.message }, 'Database initialization failed');
