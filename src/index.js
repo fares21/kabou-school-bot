@@ -3,10 +3,15 @@ import { createServer } from './web/server.js';
 import { ENV } from './config/env.js';
 import { logger } from './services/logger.js';
 import { AppCache } from './services/cache.js';
+import { initDatabase } from './services/database.js';
 
 async function main() {
   try {
     logger.info('Starting Kabou School Bot...');
+
+    // Initialize database first
+    await initDatabase();
+    logger.info('Database initialized');
 
     const bot = createBot();
     const app = createServer(bot);
@@ -23,10 +28,10 @@ async function main() {
         const webhookUrl = `${ENV.WEBHOOK_DOMAIN}${ENV.WEBHOOK_PATH}`;
         
         await bot.telegram.setWebhook(webhookUrl, {
-  secret_token: ENV.WEBHOOK_SECRET_TOKEN,
-  drop_pending_updates: true,
-  allowed_updates: ['message', 'callback_query']
-});
+          secret_token: ENV.WEBHOOK_SECRET_TOKEN,
+          drop_pending_updates: true,
+          allowed_updates: ['message', 'callback_query']
+        });
 
         logger.info({ webhookUrl }, 'Telegram webhook configured');
 
@@ -88,4 +93,3 @@ async function main() {
 }
 
 main();
-
