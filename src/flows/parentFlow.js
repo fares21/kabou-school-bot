@@ -1,6 +1,6 @@
 import { Scenes } from 'telegraf';
 import { phoneSchema, safeText, validateParentData } from '../services/validator.js';
-import { SheetsRepo } from '../services/sheets.js';
+import { db } from '../services/database.js';
 import { logger } from '../services/logger.js';
 
 function generateId(prefix) {
@@ -156,5 +156,6 @@ export function parentScene(cache) {
 
   return scene;
 }
+
 
 
