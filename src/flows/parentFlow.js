@@ -152,7 +152,9 @@ export function parentScene(cache) {
       }
     }
   });
-await SheetsRepo.logAction('ولي أمر', parentId, `Linked to student ${child['StudentID']}`);
+// await SheetsRepo.logAction('ولي أمر', parentId, `Linked to student ${child['StudentID']}`);
+
 
   return scene;
 }
+
