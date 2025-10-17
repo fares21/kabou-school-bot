@@ -1,7 +1,7 @@
 import { Scenes } from 'telegraf';
 import { phoneSchema, safeText, validateStudentData } from '../services/validator.js';
 import { subjectsKeyboard, teachersKeyboard, yearsKeyboard } from './keyboards.js';
-import { SheetsRepo } from '../services/sheets.js';
+import { db } from '../services/database.js';
 import { YEARS } from '../config/constants.js';
 import { logger } from '../services/logger.js';
 
@@ -51,7 +51,7 @@ export function studentScene(cache) {
       form.phone = parseResult.data;
       
       try {
-        const existing = await SheetsRepo.findStudentByPhone(cache, form.phone);
+        const existing = await db.getStudent(form.phone);
         
         if (existing) {
           await ctx.reply('✅ أنت مسجّل مسبقًا في النظام.\n\nلن نكرر البيانات.');
@@ -141,22 +141,16 @@ export function studentScene(cache) {
           teachers: form.teachers
         });
 
-        const now = new Date().toLocaleString('ar-DZ', {
-          timeZone: 'Africa/Algiers'
-        });
-        
         const studentId = generateId('STU');
 
-        await SheetsRepo.appendStudent({
-          'الاسم': form.name,
-          'الهاتف': form.phone,
-          'السنة الدراسية': form.year,
-          'المواد': form.subjects.join(', '),
-          'الأساتذة': form.teachers.join(', '),
-          'نوع المستخدم': 'طالب',
-          'تاريخ التسجيل': now,
-          'TelegramID': String(ctx.from.id),
-          'StudentID': studentId
+        await db.addStudent({
+          name: form.name,
+          phone: form.phone,
+          year: form.year,
+          subjects: form.subjects.join(', '),
+          teachers: form.teachers.join(', '),
+          telegramId: String(ctx.from.id),
+          studentId: studentId
         });
 
         cache.del('students_all');
@@ -195,10 +189,5 @@ export function studentScene(cache) {
     await ctx.answerCbQuery();
   });
 
-
-
   return scene;
 }
-
-
-
