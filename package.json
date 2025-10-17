@@ -1,0 +1,30 @@
+{
+  "name": "kabou-school-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Kabou School Bot - Student and Parent Registration System",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development node src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.1.5",
+    "googleapis": "^141.0.0",
+    "helmet": "^7.1.0",
+    "node-cache": "^5.1.2",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2",
+    "telegraf": "^4.16.3",
+    "zod": "^3.23.8"
+  },
+  "keywords": ["telegram", "bot", "school", "education"],
+  "author": "Your Name",
+  "license": "MIT"
+}
