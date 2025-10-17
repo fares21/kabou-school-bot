@@ -46,7 +46,7 @@ export function parentScene(cache) {
       form.phone = parseResult.data;
 
       try {
-        const existing = await SheetsRepo.findParentByPhone(cache, form.phone);
+        const existing = await db.getParent(form.phone);
         
         if (existing) {
           await ctx.reply('✅ تم العثور على سجل ولي أمر سابق.\n\nلن نكرر البيانات.');
@@ -77,34 +77,29 @@ export function parentScene(cache) {
         
         if (phoneResult.success) {
           const phone = phoneResult.data;
-          child = await SheetsRepo.findStudentByPhone(cache, phone);
+          child = await db.getStudent(phone);
         } else if (rawInput.startsWith('STU-')) {
-          child = await SheetsRepo.findStudentById(cache, rawInput);
+          child = await db.getStudentById(rawInput);
         }
 
-        const now = new Date().toLocaleString('ar-DZ', {
-          timeZone: 'Africa/Algiers'
-        });
-        
         const parentId = generateId('PAR');
 
         if (child) {
-          await SheetsRepo.appendParent({
-            'اسم ولي الأمر': form.name,
-            'رقم الهاتف': form.phone,
-            'رقم ابن': child['الهاتف'] || '',
-            'الحالة': 'تم الربط',
-            'تاريخ التسجيل': now,
-            'TelegramID': String(ctx.from.id),
-            'ParentID': parentId
+          await db.addParent({
+            name: form.name,
+            phone: form.phone,
+            childPhone: child.phone,
+            status: 'تم الربط',
+            telegramId: String(ctx.from.id),
+            parentId: parentId
           });
 
           cache.del('parents_all');
 
           await ctx.reply(
             '✅ تم ربط حسابك بابنك بنجاح!\n\n' +
-            `👦 الاسم: ${child['الاسم']}\n` +
-            `📚 السنة: ${child['السنة الدراسية']}\n` +
+            `👦 الاسم: ${child.name}\n` +
+            `📚 السنة: ${child.year}\n` +
             `🆔 رقمك التعريفي: \`${parentId}\`\n\n` +
             '🔔 سيصلك إشعار بأي تحديثات خاصة بابنك.',
             { parse_mode: 'Markdown' }
@@ -113,18 +108,17 @@ export function parentScene(cache) {
           logger.info({ 
             userId: ctx.from.id, 
             parentId,
-            childName: child['الاسم']
+            childName: child.name
           }, 'Parent linked successfully');
 
         } else {
-          await SheetsRepo.appendParent({
-            'اسم ولي الأمر': form.name,
-            'رقم الهاتف': form.phone,
-            'رقم ابن': rawInput,
-            'الحالة': 'غير مسجل',
-            'تاريخ التسجيل': now,
-            'TelegramID': String(ctx.from.id),
-            'ParentID': parentId
+          await db.addParent({
+            name: form.name,
+            phone: form.phone,
+            childPhone: rawInput,
+            status: 'غير مسجل',
+            telegramId: String(ctx.from.id),
+            parentId: parentId
           });
 
           cache.del('parents_all');
@@ -153,9 +147,5 @@ export function parentScene(cache) {
     }
   });
 
-
   return scene;
 }
-
-
-
