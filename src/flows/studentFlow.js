@@ -195,8 +195,10 @@ export function studentScene(cache) {
     await ctx.answerCbQuery();
   });
 // في نهاية التسجيل الناجح
-await SheetsRepo.logAction('طالب', studentId, 'Registered successfully');
+// await SheetsRepo.logAction('طالب', studentId, 'Registered successfully');
+
 
   return scene;
 }
+
 
