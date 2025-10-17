@@ -1,6 +1,5 @@
 import { Scenes, Markup } from 'telegraf';
 import { ENV } from '../config/env.js';
-import { SheetsRepo } from '../services/sheets.js';
 import { YEARS } from '../config/constants.js';
 import { escapeMd } from '../services/validator.js';
 import { logger } from '../services/logger.js';
@@ -166,3 +165,4 @@ export function adminScene(cache) {
 
   return scene;
 }
+
