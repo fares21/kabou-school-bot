@@ -3,166 +3,262 @@ import { ENV } from '../config/env.js';
 import { YEARS } from '../config/constants.js';
 import { escapeMd } from '../services/validator.js';
 import { logger } from '../services/logger.js';
+import { db } from '../services/database.js';
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function getRecipients(target, selectedYear = null) {
+  if (target === 'students') {
+    const r = await db.query(
+      "SELECT DISTINCT telegram_id FROM students WHERE telegram_id IS NOT NULL AND telegram_id <> ''"
+    );
+    return r.rows.map(x => String(x.telegram_id));
+  }
+  if (target === 'parents') {
+    const r = await db.query(
+      "SELECT DISTINCT telegram_id FROM parents WHERE telegram_id IS NOT NULL AND telegram_id <> ''"
+    );
+    return r.rows.map(x => String(x.telegram_id));
+  }
+  if (target === 'year' && selectedYear) {
+    const r = await db.query(
+      "SELECT DISTINCT telegram_id FROM students WHERE year = $1 AND telegram_id IS NOT NULL AND telegram_id <> ''",
+      [selectedYear]
+    );
+    return r.rows.map(x => String(x.telegram_id));
+  }
+  return [];
+}
+
+async function sendInBatches(telegram, ids, message, options = {}) {
+  let ok = 0, fail = 0;
+  const unique = Array.from(new Set(ids)); // إزالة التكرار
+  const baseDelay = options.baseDelayMs ?? 60;
+  const penaltyDelay = options.penaltyDelayMs ?? 1500;
+
+  for (const id of unique) {
+    try {
+      await telegram.sendMessage(id, message, { disable_web_page_preview: true, parse_mode: 'Markdown' });
+      ok++;
+      await sleep(baseDelay);
+    } catch (e) {
+      fail++;
+      const msg = String(e?.message || e);
+      logger.warn({ recipient: id, err: msg }, 'broadcast_send_failed');
+      if (msg.includes('429') || msg.includes('Too Many Requests')) {
+        await sleep(penaltyDelay);
+      }
+      // أخطاء شائعة أخرى يمكن تجاهلها والاستمرار:
+      // 400: Bad Request: chat not found
+      // 403: Forbidden: bot was blocked by the user
+    }
+  }
+  return { ok, fail, total: unique.length };
+}
 
 export function adminScene(cache) {
   const scene = new Scenes.BaseScene('admin');
 
   scene.enter(async (ctx) => {
-    const userId = String(ctx.from?.id);
-    
-    if (!ENV.ADMIN_IDS.includes(userId)) {
-      await ctx.reply('⛔ ليس لديك صلاحية الوصول إلى لوحة الإدارة.');
-      return ctx.scene.leave();
-    }
-
-    await ctx.reply(
-      '⚙️ لوحة المدير\n\nاختر نوع البث:',
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('👨‍🎓 للطلاب', 'adm:students'),
-          Markup.button.callback('👨‍👩‍👧 للأولياء', 'adm:parents')
-        ],
-        [Markup.button.callback('🎓 حسب السنة', 'adm:year')],
-        [Markup.button.callback('❌ إلغاء', 'adm:cancel')]
-      ])
-    );
-  });
-
-  scene.action('adm:students', async (ctx) => {
-    ctx.scene.state.target = 'students';
-    await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع الطلاب:');
-    ctx.scene.state.awaitingText = true;
-    await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
-  });
-
-  scene.action('adm:parents', async (ctx) => {
-    ctx.scene.state.target = 'parents';
-    await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع أولياء الأمور:');
-    ctx.scene.state.awaitingText = true;
-    await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
-  });
-
-  scene.action('adm:year', async (ctx) => {
-    ctx.scene.state.target = 'year';
-    
-    const buttons = YEARS.map(year => [
-      Markup.button.callback(year, `year:${year}`)
-    ]);
-    buttons.push([Markup.button.callback('❌ إلغاء', 'adm:cancel')]);
-    
-    await ctx.editMessageText(
-      '🎓 اختر السنة الدراسية:',
-      Markup.inlineKeyboard(buttons)
-    );
-    await ctx.answerCbQuery();
-  });
-
-  scene.action(/year:(.+)/, async (ctx) => {
-    const year = ctx.match[1];
-    ctx.scene.state.selectedYear = year;
-    
-    await ctx.editMessageText(
-      `📝 السنة المختارة: ${year}\n\nأرسل نص الرسالة:`
-    );
-    ctx.scene.state.awaitingText = true;
-    await ctx.answerCbQuery(`✅ تم اختيار: ${year}`);
-  });
-
-  scene.action('adm:cancel', async (ctx) => {
-    await ctx.editMessageText('❌ تم الإلغاء');
-    await ctx.answerCbQuery();
-    return ctx.scene.leave();
-  });
-
-  scene.on('text', async (ctx) => {
-    if (!ctx.scene.state.awaitingText) {
-      return ctx.reply('⚠️ استخدم الأزرار للاختيار.');
-    }
-
-    const text = ctx.message.text;
-    const md = escapeMd(text);
-    const target = ctx.scene.state.target;
-
     try {
-      let recipients = [];
-      let description = '';
-
-      if (target === 'students') {
-        const students = await SheetsRepo.listStudentsCached(cache);
-        recipients = students
-          .map(s => s['TelegramID'])
-          .filter(Boolean);
-        description = 'جميع الطلاب';
-
-      } else if (target === 'parents') {
-        const parents = await SheetsRepo.listParentsCached(cache);
-        recipients = parents
-          .map(p => p['TelegramID'])
-          .filter(Boolean);
-        description = 'جميع أولياء الأمور';
-
-      } else if (target === 'year') {
-        const year = ctx.scene.state.selectedYear;
-        const students = await SheetsRepo.listStudentsCached(cache);
-        recipients = students
-          .filter(s => s['السنة الدراسية'] === year)
-          .map(s => s['TelegramID'])
-          .filter(Boolean);
-        description = `طلاب سنة ${year}`;
-      }
-
-      const uniqueRecipients = [...new Set(recipients)];
-      
-      if (uniqueRecipients.length === 0) {
-        await ctx.reply('⚠️ لا يوجد مستلمون لهذه الفئة.');
+      const userId = String(ctx.from?.id);
+      if (!ENV.ADMIN_IDS.includes(userId)) {
+        await ctx.reply('⛔ ليس لديك صلاحية الوصول إلى لوحة الإدارة.');
         return ctx.scene.leave();
       }
 
+      ctx.scene.state.target = null;
+      ctx.scene.state.selectedYear = null;
+      ctx.scene.state.awaitingText = false;
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+
       await ctx.reply(
-        `📤 جاري إرسال الرسالة إلى ${uniqueRecipients.length} مستخدم من ${description}...`
+        '⚙️ لوحة المدير
+
+اختر نوع البث:',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('👨‍🎓 للطلاب', 'adm:students'),
+            Markup.button.callback('👨‍👩‍👧 للأولياء', 'adm:parents')
+          ],
+          [Markup.button.callback('🎓 حسب السنة', 'adm:year')],
+          [Markup.button.callback('❌ إلغاء', 'adm:cancel')]
+        ])
       );
+    } catch (error) {
+      logger.error({ error: error.message }, 'admin_enter_error');
+      await ctx.reply('❌ حدث خطأ غير متوقع أثناء فتح لوحة الإدارة.');
+      return ctx.scene.leave();
+    }
+  });
 
-      let successCount = 0;
-      let failCount = 0;
+  scene.action('adm:students', async (ctx) => {
+    try {
+      ctx.scene.state.target = 'students';
+      ctx.scene.state.awaitingText = true;
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+      await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع الطلاب:');
+      await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
+    } catch (e) {
+      await ctx.answerCbQuery('❌ فشل التحضير');
+    }
+  });
 
-      for (const chatId of uniqueRecipients) {
-        try {
-          await ctx.telegram.sendMessage(chatId, md, {
-            parse_mode: 'MarkdownV2'
-          });
-          successCount++;
-          
-          // تأخير بسيط لتجنب حدود Telegram
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (error) {
-          failCount++;
-          logger.error({ chatId, error: error.message }, 'Broadcast failed');
-        }
+  scene.action('adm:parents', async (ctx) => {
+    try {
+      ctx.scene.state.target = 'parents';
+      ctx.scene.state.awaitingText = true;
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+      await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع أولياء الأمور:');
+      await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
+    } catch (e) {
+      await ctx.answerCbQuery('❌ فشل التحضير');
+    }
+  });
+
+  scene.action('adm:year', async (ctx) => {
+    try {
+      ctx.scene.state.target = 'year';
+      ctx.scene.state.selectedYear = null;
+      ctx.scene.state.awaitingText = false;
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+
+      const buttons = YEARS.map(year => [Markup.button.callback(year, `year:${year}`)]);
+      buttons.push([Markup.button.callback('❌ إلغاء', 'adm:cancel')]);
+
+      await ctx.editMessageText('🎓 اختر السنة الدراسية:', Markup.inlineKeyboard(buttons));
+      await ctx.answerCbQuery();
+    } catch (e) {
+      await ctx.answerCbQuery('❌ فشل التحضير');
+    }
+  });
+
+  scene.action(/year:(.+)/, async (ctx) => {
+    try {
+      const year = ctx.match[1];
+      ctx.scene.state.selectedYear = year;
+      ctx.scene.state.awaitingText = true;
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+      await ctx.editMessageText(`📝 السنة المختارة: ${year}
+
+أرسل نص الرسالة:`);
+      await ctx.answerCbQuery(`✅ تم اختيار: ${year}`);
+    } catch (e) {
+      await ctx.answerCbQuery('❌ فشل الاختيار');
+    }
+  });
+
+  scene.action('adm:cancel', async (ctx) => {
+    try {
+      await ctx.editMessageText('❌ تم الإلغاء');
+      await ctx.answerCbQuery();
+    } finally {
+      return ctx.scene.leave();
+    }
+  });
+
+  scene.on('text', async (ctx) => {
+    try {
+      // يجب أن يسبق اختيار الهدف (وأحياناً السنة)
+      if (!ctx.scene.state.awaitingText || !ctx.scene.state.target) {
+        return ctx.reply('⚠️ استخدم الأزرار لاختيار الفئة أولاً، ثم أرسل النص.');
       }
 
+      const raw = ctx.message.text;
+      const message = typeof escapeMd === 'function' ? escapeMd(raw) : raw;
+
+      // حفظ المعاينة والانتقال لمرحلة التأكيد
+      ctx.scene.state.previewText = message;
+      ctx.scene.state.awaitingText = false;
+      ctx.scene.state.awaitingConfirm = true;
+
+      const targetLabel = ctx.scene.state.target === 'students'
+        ? 'جميع الطلاب'
+        : ctx.scene.state.target === 'parents'
+          ? 'جميع أولياء الأمور'
+          : `سنة: ${ctx.scene.state.selectedYear || 'غير محددة'}`;
+
       await ctx.reply(
-        `✅ اكتمل البث!\n\n` +
-        `📊 الإحصائيات:\n` +
-        `• نجح: ${successCount}\n` +
-        `• فشل: ${failCount}\n` +
-        `• الإجمالي: ${uniqueRecipients.length}`
+        `📋 المعاينة:
+
+${message}
+
+📤 سيتم الإرسال إلى: ${targetLabel}
+
+هل تريد المتابعة؟`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('✅ تأكيد الإرسال', 'bc:confirm')],
+          [Markup.button.callback('❌ إلغاء', 'adm:cancel')]
+        ])
+      );
+    } catch (error) {
+      logger.error({ error: error.message }, 'admin_preview_error');
+      await ctx.reply(`❌ حدث خطأ أثناء تجهيز المعاينة: ${error.message}`);
+      return ctx.scene.leave();
+    }
+  });
+
+  scene.action('bc:confirm', async (ctx) => {
+    try {
+      if (!ctx.scene.state.awaitingConfirm || !ctx.scene.state.previewText || !ctx.scene.state.target) {
+        await ctx.answerCbQuery('⚠️ لا توجد رسالة مؤكدة للإرسال.');
+        return;
+      }
+
+      const target = ctx.scene.state.target;
+      const selectedYear = ctx.scene.state.selectedYear;
+      const message = ctx.scene.state.previewText;
+
+      // جلب المستلمين
+      const ids = await getRecipients(target, selectedYear);
+      if (!ids.length) {
+        await ctx.editMessageText('ℹ️ لا يوجد مستلمون لهذا البث حالياً.');
+        ctx.scene.state.awaitingConfirm = false;
+        return ctx.scene.leave();
+      }
+
+      await ctx.editMessageText(`🚀 جاري الإرسال إلى ${ids.length} مستلم...`);
+
+      // إرسال متدرّج مع مهلة وتخفيف عند 429
+      const res = await sendInBatches(ctx.telegram, ids, message, {
+        baseDelayMs: 60,
+        penaltyDelayMs: 1500
+      });
+
+      // ملخص
+      await ctx.reply(
+        `✅ اكتمل البث
+
+الإجمالي: ${res.total}
+نجح: ${res.ok}
+فشل: ${res.fail}`
       );
 
-      logger.info({
-        adminId: ctx.from.id,
-        target: description,
-        successCount,
-        failCount
-      }, 'Broadcast completed');
-
+      logger.info({ target, selectedYear, ...res }, 'broadcast_completed');
     } catch (error) {
-      logger.error({ error: error.message }, 'Broadcast error');
-      await ctx.reply('❌ حدث خطأ أثناء البث. حاول مجددًا.');
+      logger.error({ error: error.message }, 'broadcast_confirm_error');
+      await ctx.reply(`❌ حدث خطأ أثناء الإرسال: ${error.message}`);
+    } finally {
+      // تنظيف الحالة والخروج من المشهد
+      ctx.scene.state.awaitingConfirm = false;
+      ctx.scene.state.previewText = null;
+      ctx.scene.state.target = null;
+      ctx.scene.state.selectedYear = null;
+      return ctx.scene.leave();
     }
+  });
 
-    return ctx.scene.leave();
+  // تعامل عام مع أي callback_query غير معرّفة
+  scene.on('callback_query', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch (_) {}
   });
 
   return scene;
 }
-
