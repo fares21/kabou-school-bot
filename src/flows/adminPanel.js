@@ -1,3 +1,4 @@
+// src/flows/adminScene.js
 import { Scenes, Markup } from 'telegraf';
 import { ENV } from '../config/env.js';
 import { YEARS } from '../config/constants.js';
@@ -32,7 +33,7 @@ async function getRecipients(target, selectedYear = null) {
 
 async function sendInBatches(telegram, ids, message, options = {}) {
   let ok = 0, fail = 0;
-  const unique = Array.from(new Set(ids)); // إزالة التكرار
+  const unique = Array.from(new Set(ids));
   const baseDelay = options.baseDelayMs ?? 60;
   const penaltyDelay = options.penaltyDelayMs ?? 1500;
 
@@ -48,9 +49,7 @@ async function sendInBatches(telegram, ids, message, options = {}) {
       if (msg.includes('429') || msg.includes('Too Many Requests')) {
         await sleep(penaltyDelay);
       }
-      // أخطاء شائعة أخرى يمكن تجاهلها والاستمرار:
-      // 400: Bad Request: chat not found
-      // 403: Forbidden: bot was blocked by the user
+      // أخطاء 400/403 تُتجاهل مع الاستمرار
     }
   }
   return { ok, fail, total: unique.length };
@@ -101,7 +100,7 @@ export function adminScene(cache) {
       ctx.scene.state.previewText = null;
       await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع الطلاب:');
       await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
-    } catch (e) {
+    } catch {
       await ctx.answerCbQuery('❌ فشل التحضير');
     }
   });
@@ -114,7 +113,7 @@ export function adminScene(cache) {
       ctx.scene.state.previewText = null;
       await ctx.editMessageText('📝 أرسل نص الرسالة للبث إلى جميع أولياء الأمور:');
       await ctx.answerCbQuery('✅ جاهز لاستقبال الرسالة');
-    } catch (e) {
+    } catch {
       await ctx.answerCbQuery('❌ فشل التحضير');
     }
   });
@@ -132,7 +131,7 @@ export function adminScene(cache) {
 
       await ctx.editMessageText('🎓 اختر السنة الدراسية:', Markup.inlineKeyboard(buttons));
       await ctx.answerCbQuery();
-    } catch (e) {
+    } catch {
       await ctx.answerCbQuery('❌ فشل التحضير');
     }
   });
@@ -148,7 +147,7 @@ export function adminScene(cache) {
 
 أرسل نص الرسالة:`);
       await ctx.answerCbQuery(`✅ تم اختيار: ${year}`);
-    } catch (e) {
+    } catch {
       await ctx.answerCbQuery('❌ فشل الاختيار');
     }
   });
@@ -164,7 +163,6 @@ export function adminScene(cache) {
 
   scene.on('text', async (ctx) => {
     try {
-      // يجب أن يسبق اختيار الهدف (وأحياناً السنة)
       if (!ctx.scene.state.awaitingText || !ctx.scene.state.target) {
         return ctx.reply('⚠️ استخدم الأزرار لاختيار الفئة أولاً، ثم أرسل النص.');
       }
@@ -172,7 +170,6 @@ export function adminScene(cache) {
       const raw = ctx.message.text;
       const message = typeof escapeMd === 'function' ? escapeMd(raw) : raw;
 
-      // حفظ المعاينة والانتقال لمرحلة التأكيد
       ctx.scene.state.previewText = message;
       ctx.scene.state.awaitingText = false;
       ctx.scene.state.awaitingConfirm = true;
@@ -214,7 +211,6 @@ ${message}
       const selectedYear = ctx.scene.state.selectedYear;
       const message = ctx.scene.state.previewText;
 
-      // جلب المستلمين
       const ids = await getRecipients(target, selectedYear);
       if (!ids.length) {
         await ctx.editMessageText('ℹ️ لا يوجد مستلمون لهذا البث حالياً.');
@@ -224,13 +220,11 @@ ${message}
 
       await ctx.editMessageText(`🚀 جاري الإرسال إلى ${ids.length} مستلم...`);
 
-      // إرسال متدرّج مع مهلة وتخفيف عند 429
       const res = await sendInBatches(ctx.telegram, ids, message, {
         baseDelayMs: 60,
         penaltyDelayMs: 1500
       });
 
-      // ملخص
       await ctx.reply(
         `✅ اكتمل البث
 
@@ -244,7 +238,6 @@ ${message}
       logger.error({ error: error.message }, 'broadcast_confirm_error');
       await ctx.reply(`❌ حدث خطأ أثناء الإرسال: ${error.message}`);
     } finally {
-      // تنظيف الحالة والخروج من المشهد
       ctx.scene.state.awaitingConfirm = false;
       ctx.scene.state.previewText = null;
       ctx.scene.state.target = null;
@@ -253,12 +246,9 @@ ${message}
     }
   });
 
-  // تعامل عام مع أي callback_query غير معرّفة
   scene.on('callback_query', async (ctx) => {
-    try {
-      await ctx.answerCbQuery();
-    } catch (_) {}
+    try { await ctx.answerCbQuery(); } catch {}
   });
 
   return scene;
-}
+                                                                }
