@@ -1,4 +1,3 @@
-// src/index.js
 import { createBot } from './bot.js';
 import { createServer } from './web/server.js';
 import { ENV } from './config/env.js';
@@ -10,7 +9,7 @@ async function main() {
   try {
     logger.info('Starting Kabou School Bot...');
 
-    // 1) تهيئة قاعدة البيانات أولاً
+    // 1) تهيئة قاعدة البيانات
     await initDatabase();
     logger.info('Database initialized');
 
