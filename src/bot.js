@@ -7,10 +7,10 @@ import { logger } from './services/logger.js';
 import { studentScene } from './flows/studentFlow.js';
 import { parentScene } from './flows/parentFlow.js';
 
-// مشهد الإدارة للبث (تأكد من وجوده كما أرسلته لك سابقاً)
+// مشهد الإدارة للبث (نسختُه الأحدث تعمل مع PostgreSQL فقط)
 import { adminScene } from './flows/adminScene.js';
 
-// يمكنك إبقاء هذه الاستيرادات للمستقبل إن رغبت بقيود اختيارية
+// لا نستخدم أي قيود لكي تكون التفاعلات غير محدودة كما طلبت
 // import { userRateLimit } from './rateLimit.js';
 // import { sessionGuard } from './middlewares/sessionGuard.js';
 
@@ -26,59 +26,59 @@ export function createBot() {
     parentScene(/* cache إن لزم */),
     adminScene(/* cache إن لزم */)
   ]);
-
   bot.use(stage.middleware());
 
-  // 3) لا قيود: تعطيل أي معدلات (حسب طلبك)
+  // 3) لا قيود: عطّل أي Rate Limit أو Session Guard
   // bot.use(userRateLimit());
-  // bot.use(sessionGuard()); // لا تستخدمه طالما تريد تفاعلات غير محدودة
+  // bot.use(sessionGuard());
 
-  // 4) الأوامر الأساسية
+  // 4) أمر البدء برسالة سليمة خالية من أخطاء السلاسل المتعددة الأسطر
   bot.start(async (ctx) => {
     try {
-      await ctx.reply(
-        'مرحبًا! 👋
+      const text = `مرحبًا! 👋
 🎓 مرحبًا بك في بوت مدرسة كابو
 
-اختر هويتك:',
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '👨‍🎓 طالب', callback_data: 'role:student' }],
-              [{ text: '👨‍👩‍👧 ولي أمر', callback_data: 'role:parent' }],
-              ...(ENV.ADMIN_IDS.includes(String(ctx.from?.id))
-                ? [[{ text: '⚙️ لوحة المدير', callback_data: 'role:admin' }]]
-                : [])
-            ]
-          }
-        }
-      );
+اختر هويتك:`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: '👨‍🎓 طالب', callback_data: 'role:student' }],
+          [{ text: '👨‍👩‍👧 ولي أمر', callback_data: 'role:parent' }]
+        ]
+      };
+
+      if (ENV.ADMIN_IDS.includes(String(ctx.from?.id))) {
+        keyboard.inline_keyboard.push([{ text: '⚙️ لوحة المدير', callback_data: 'role:admin' }]);
+      }
+
+      await ctx.reply(text, { reply_markup: keyboard });
     } catch (e) {
       logger.error({ err: e.message }, 'start_command_error');
     }
   });
 
-  // 5) انتقال إلى المشاهد حسب الاختيار
+  // 5) الانتقال إلى مشهد الطالب
   bot.action('role:student', async (ctx) => {
     await ctx.answerCbQuery();
     return ctx.scene.enter('student');
   });
 
+  // 6) الانتقال إلى مشهد ولي الأمر
   bot.action('role:parent', async (ctx) => {
     await ctx.answerCbQuery();
     return ctx.scene.enter('parent');
   });
 
+  // 7) الانتقال إلى لوحة الإدارة (للإداريين فقط)
   bot.action('role:admin', async (ctx) => {
     await ctx.answerCbQuery();
-    // التحقق من الصلاحية
     if (!ENV.ADMIN_IDS.includes(String(ctx.from?.id))) {
       return ctx.reply('⛔ ليس لديك صلاحية الوصول إلى لوحة الإدارة.');
     }
     return ctx.scene.enter('admin');
   });
 
-  // 6) أمر مباشر للوصول للوحة الإدارة
+  // 8) أمر مباشر للوصول للوحة الإدارة
   bot.command('admin', async (ctx) => {
     if (!ENV.ADMIN_IDS.includes(String(ctx.from?.id))) {
       return ctx.reply('⛔ ليس لديك صلاحية الوصول إلى لوحة الإدارة.');
@@ -86,16 +86,14 @@ export function createBot() {
     return ctx.scene.enter('admin');
   });
 
-  // 7) رد افتراضي عند النصوص خارج المشاهد
+  // 9) توجيه النصوص إلى المشاهد أولاً
   bot.on('text', async (ctx, next) => {
-    // اسمح للمشاهد بالتعامل أولًا
     return next();
   });
 
-  // 8) معالجة أخطاء عامة للبوت
+  // 10) معالجة أخطاء عامة للبوت
   bot.catch((err, ctx) => {
     logger.error({ err: err.message }, 'bot_global_error');
-    // عدم إسكات، لكن بدون إسقاط العملية
   });
 
   return bot;
