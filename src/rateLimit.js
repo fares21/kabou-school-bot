@@ -1,38 +1,19 @@
-import { logger } from '../services/logger.js';
+// src/rateLimit.js
+// نسخة No-Op لإلغاء أي حدود تفاعل كما طلبت
+// يمكنك إبقاء هذه الدوال مستقبلاً لو رغبت بإضافة قيود خفيفة
 
-export function userRateLimit(windowMs = 3000, maxRequests = 3) {
-  const userHits = new Map();
-  
-  // تنظيف دوري للذاكرة
-  setInterval(() => {
-    const now = Date.now();
-    for (const [userId, data] of userHits.entries()) {
-      if (now > data.resetAt + windowMs) {
-        userHits.delete(userId);
-      }
-    }
-  }, 60000);
-  
+// للاستخدام مع Telegraf (بوت تيليغرام)
+export function userRateLimit() {
   return async (ctx, next) => {
-    const userId = ctx.from?.id;
-    if (!userId) return next();
-    
-    const now = Date.now();
-    const userData = userHits.get(userId) || { count: 0, resetAt: now + windowMs };
-    
-    if (now > userData.resetAt) {
-      userData.count = 0;
-      userData.resetAt = now + windowMs;
-    }
-    
-    userData.count += 1;
-    userHits.set(userId, userData);
-    
-    if (userData.count > maxRequests) {
-      logger.warn({ userId }, 'Rate limit exceeded');
-      return;
-    }
-    
+    // لا قيود — تمرير مباشر
+    return next();
+  };
+}
+
+// للاستخدام مع Express (HTTP server)
+export function httpRateLimit() {
+  return (req, res, next) => {
+    // لا قيود — تمرير مباشر
     return next();
   };
 }
