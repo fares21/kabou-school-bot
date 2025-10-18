@@ -1,4 +1,3 @@
-// src/bot.js
 import { Telegraf, Scenes, session } from 'telegraf';
 import { ENV } from './config/env.js';
 import { logger } from './services/logger.js';
