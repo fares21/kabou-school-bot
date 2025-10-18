@@ -1,3 +1,4 @@
+// src/flows/adminScene.js
 import { Scenes, Markup } from 'telegraf';
 import { ENV } from '../config/env.js';
 import { YEARS } from '../config/constants.js';
@@ -71,9 +72,9 @@ export function adminScene(cache) {
       ctx.scene.state.previewText = null;
 
       await ctx.reply(
-        '⚙️ لوحة المدير
+        `⚙️ لوحة المدير
 
-اختر نوع البث:',
+اختر نوع البث:`,
         Markup.inlineKeyboard([
           [
             Markup.button.callback('👨‍🎓 للطلاب', 'adm:students'),
@@ -124,7 +125,7 @@ export function adminScene(cache) {
       ctx.scene.state.awaitingConfirm = false;
       ctx.scene.state.previewText = null;
 
-      const buttons = YEARS.map(year => [Markup.button.callback(year, `year:${year}`)]);
+    const buttons = YEARS.map(year => [Markup.button.callback(year, `year:${year}`)]);
       buttons.push([Markup.button.callback('❌ إلغاء', 'adm:cancel')]);
 
       await ctx.editMessageText('🎓 اختر السنة الدراسية:', Markup.inlineKeyboard(buttons));
